@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Koperasi Siswa</title>
+    <!-- Tailwind CSS CDN for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Inter for a clean look -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 antialiased min-h-screen flex items-center justify-center p-4">
+
+    <!-- Root container for the React application -->
+    <div id="root" class="w-full max-w-2xl bg-white rounded-xl shadow-2xl p-6 sm:p-8"></div>
+    
+    <!-- Custom Modal Component to replace alert(), prompt(), and confirm() -->
+    <div id="custom-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl space-y-4">
+            <p id="modal-message" class="text-gray-700 text-center"></p>
+            <input id="modal-input" type="text" class="w-full p-2 border border-gray-300 rounded-lg hidden">
+            <div id="modal-buttons" class="flex space-x-2 justify-center">
+                <!-- Buttons will be rendered here by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- React and ReactDOM CDNs -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <!-- Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Data in-memory for simulation
+        // Added registrationDate and expiryDate fields
+        const initialStudents = [
+            { id: 'siswa1', name: 'Budi', balance: 50000, class: '10A', transactions: [], password: '123', registrationDate: new Date('2024-01-01').toISOString(), expiryDate: new Date('2027-01-01').toISOString() },
+            { id: 'siswa2', name: 'Siti', balance: 75000, class: '11B', transactions: [], password: '123', registrationDate: new Date('2023-08-10').toISOString(), expiryDate: new Date('2026-08-10').toISOString() },
+        ];
+        // New state for pending registrations
+        const initialPendingRegistrations = [];
+
+        const initialProducts = [
+            { id: 1, name: 'Buku Tulis', price: 5000, stock: 100 },
+            { id: 2, name: 'Pulpen', price: 3000, stock: 150 },
+            { id: 3, name: 'Penghapus', price: 2000, stock: 50 },
+            { id: 4, name: 'Air Mineral', price: 3000, stock: 200 },
+            { id: 5, name: 'Roti', price: 4000, stock: 80 },
+        ];
+        const deliveryStaff = [
+            { id: 'staff1', name: 'Anto' },
+            { id: 'staff2', name: 'Bambang' },
+            { id: 'staff3', name: 'Cindy' },
+        ];
+        const studentClasses = ['10A', '10B', '11A', '11B', '12A', '12B'];
+        const DELIVERY_FEE = 0; // Biaya pengiriman gratis
+
+        // --- Custom Modal Functions ---
+        const modal = document.getElementById('custom-modal');
+        const modalMessage = document.getElementById('modal-message');
+        const modalInput = document.getElementById('modal-input');
+        const modalButtons = document.getElementById('modal-buttons');
+
+        const showCustomMessage = (message) => {
+            modalMessage.textContent = message;
+            modalInput.classList.add('hidden');
+            modalButtons.innerHTML = `<button class="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700" onclick="window.closeCustomModal()">Tutup</button>`;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        const showCustomConfirm = (message, onConfirm, onCancel) => {
+            modalMessage.textContent = message;
+            modalInput.classList.add('hidden');
+            modalButtons.innerHTML = `
+                <button class="w-1/2 bg-gray-300 text-gray-800 font-bold py-2 rounded-lg hover:bg-gray-400" onclick="window.handleConfirm(false)">Batal</button>
+                <button class="w-1/2 bg-red-600 text-white font-bold py-2 rounded-lg hover:bg-red-700" onclick="window.handleConfirm(true)">Ya</button>
+            `;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            window.handleConfirm = (result) => {
+                window.closeCustomModal();
+                if (result) {
+                    onConfirm();
+                } else if (onCancel) {
+                    onCancel();
+                }
+                delete window.handleConfirm;
+            };
+        };
+
+        const showCustomPrompt = (message, defaultValue, onOk, onCancel) => {
+            modalMessage.textContent = message;
+            modalInput.value = defaultValue;
+            modalInput.classList.remove('hidden');
+            modalButtons.innerHTML = `
+                <button class="w-1/2 bg-gray-300 text-gray-800 font-bold py-2 rounded-lg hover:bg-gray-400" onclick="window.handlePrompt(null)">Batal</button>
+                <button class="w-1/2 bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700" onclick="window.handlePrompt(document.getElementById('modal-input').value)">OK</button>
+            `;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            window.handlePrompt = (result) => {
+                window.closeCustomModal();
+                if (result !== null) {
+                    onOk(result);
+                } else if (onCancel) {
+                    onCancel();
+                }
+                delete window.handlePrompt;
+            };
+        };
+
+        window.closeCustomModal = () => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        };
+
+        // Root component of the application
+        const App = () => {
+            const [loggedInUser, setLoggedInUser] = useState(null);
+            const [loggedInRole, setLoggedInRole] = useState(null);
+            const [students, setStudents] = useState(initialStudents);
+            const [pendingRegistrations, setPendingRegistrations] = useState(initialPendingRegistrations);
+            const [products, setProducts] = useState(initialProducts);
+            const [topUpRequests, setTopUpRequests] = useState([]);
+            // Updated delivery order statuses
+            const [deliveryOrders, setDeliveryOrders] = useState([]);
+
+            const handleLogout = () => {
+                setLoggedInUser(null);
+                setLoggedInRole(null);
+            };
+
+            // Conditional rendering based on login status and role
+            if (loggedInUser) {
+                if (loggedInRole === 'admin') {
+                    return (
+                        <AdminDashboard
+                            setLoggedInUser={setLoggedInUser}
+                            setLoggedInRole={setLoggedInRole}
+                            students={students}
+                            setStudents={setStudents}
+                            pendingRegistrations={pendingRegistrations}
+                            setPendingRegistrations={setPendingRegistrations}
+                            products={products}
+                            setProducts={setProducts}
+                            topUpRequests={topUpRequests}
+                            setTopUpRequests={setTopUpRequests}
+                            deliveryOrders={deliveryOrders}
+                            setDeliveryOrders={setDeliveryOrders}
+                            deliveryStaff={deliveryStaff}
+                        />
+                    );
+                } else {
+                    return (
+                        <StudentDashboard
+                            loggedInUser={loggedInUser}
+                            setLoggedInUser={setLoggedInUser}
+                            setLoggedInRole={setLoggedInRole}
+                            students={students}
+                            setStudents={setStudents}
+                            products={products}
+                            setProducts={setProducts}
+                            topUpRequests={topUpRequests}
+                            setTopUpRequests={setTopUpRequests}
+                            deliveryOrders={deliveryOrders}
+                            setDeliveryOrders={setDeliveryOrders}
+                        />
+                    );
+                }
+            } else {
+                return (
+                    <LoginPage
+                        setLoggedInUser={setLoggedInUser}
+                        setLoggedInRole={setLoggedInRole}
+                        students={students}
+                        setStudents={setStudents}
+                        pendingRegistrations={pendingRegistrations}
+                        setPendingRegistrations={setPendingRegistrations}
+                    />
+                );
+            }
+        };
+
+        const LoginPage = ({ setLoggedInUser, setLoggedInRole, students, setStudents, pendingRegistrations, setPendingRegistrations }) => {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [loginError, setLoginError] = useState(false);
+            const [view, setView] = useState('login'); // 'login' or 'register'
+
+            // Function to handle student login with validity check
+            const handleStudentLogin = () => {
+                const student = students.find(s => s.id === username);
+                const pendingStudent = pendingRegistrations.find(s => s.id === username);
+
+                if (pendingStudent) {
+                    showCustomMessage('Akun Anda masih dalam proses persetujuan oleh admin.');
+                    return;
+                }
+
+                if (student) {
+                    if (student.password !== password) {
+                         setLoginError(true);
+                         showCustomMessage('Kata sandi salah.');
+                         return;
+                    }
+                    const now = new Date();
+                    const expiryDate = new Date(student.expiryDate);
+                    
+                    if (now > expiryDate) {
+                        setLoginError(true);
+                        showCustomMessage('Akun Anda sudah tidak aktif (kedaluwarsa). Silakan hubungi admin.');
+                        return;
+                    }
+                    
+                    setLoggedInUser(student);
+                    setLoggedInRole('siswa');
+                    setLoginError(false);
+                } else {
+                    setLoginError(true);
+                    showCustomMessage('ID pengguna tidak ditemukan. Mohon coba lagi atau daftar akun baru.');
+                }
+            };
+
+            const handleAdminLogin = () => {
+                if (username === 'admin' && password === 'admin') {
+                    setLoggedInUser({ id: 'admin', name: 'Admin' });
+                    setLoggedInRole('admin');
+                    setLoginError(false);
+                } else {
+                    setLoginError(true);
+                    showCustomMessage('Username atau kata sandi admin salah.');
+                }
+            };
+
+            const handleRegistration = (newStudentData) => {
+                // Check if student ID already exists in either active or pending lists
+                if (students.find(s => s.id === newStudentData.studentId) || pendingRegistrations.find(s => s.id === newStudentData.studentId)) {
+                    showCustomMessage('ID Siswa sudah terdaftar atau sedang dalam proses. Silakan gunakan ID lain atau hubungi admin.');
+                    return;
+                }
+
+                // Calculate expiry date (3 years from now)
+                const registrationDate = new Date();
+                const expiryDate = new Date();
+                expiryDate.setFullYear(registrationDate.getFullYear() + 3);
+
+                const newPendingStudent = {
+                    id: newStudentData.studentId,
+                    name: newStudentData.studentName,
+                    balance: 0,
+                    class: newStudentData.studentClass,
+                    transactions: [],
+                    password: newStudentData.password,
+                    registrationDate: registrationDate.toISOString(),
+                    expiryDate: expiryDate.toISOString(),
+                };
+                
+                setPendingRegistrations(prevPending => [...prevPending, newPendingStudent]);
+                showCustomMessage(`Pendaftaran berhasil diajukan. Akun Anda akan aktif setelah disetujui oleh admin.`);
+                setView('login');
+            };
+
+            if (view === 'register') {
+                return (
+                    <RegistrationPage
+                        handleRegistration={handleRegistration}
+                        studentClasses={studentClasses}
+                        setView={setView}
+                    />
+                );
+            }
+
+            return (
+                <div className="flex flex-col items-center justify-center p-4">
+                    <h1 className="text-3xl font-extrabold text-center text-gray-900 mb-2">Koperasi Sekolah</h1>
+                    <p className="text-center text-gray-500 mb-8">Masuk untuk melanjutkan</p>
+                    <input
+                        type="text"
+                        placeholder="Username"
+                        className="w-full p-3 mb-4 text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-200 transition-all"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                    />
+                    <input
+                        type="password"
+                        placeholder="Kata Sandi"
+                        className="w-full p-3 mb-4 text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-200 transition-all"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                        className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg mb-4"
+                        onClick={handleStudentLogin}
+                    >
+                        Masuk sebagai Siswa
+                    </button>
+                    <button
+                        className="w-full bg-gray-600 text-white font-bold py-3 rounded-lg hover:bg-gray-700 transition-colors shadow-lg"
+                        onClick={handleAdminLogin}
+                    >
+                        Masuk sebagai Admin
+                    </button>
+                    <button
+                        className="mt-4 text-blue-600 hover:text-blue-800 font-semibold"
+                        onClick={() => setView('register')}
+                    >
+                        Daftar Siswa Baru
+                    </button>
+                </div>
+            );
+        };
+        
+        const RegistrationPage = ({ handleRegistration, studentClasses, setView }) => {
+            const [studentName, setStudentName] = useState('');
+            const [studentId, setStudentId] = useState('');
+            const [studentClass, setStudentClass] = useState(studentClasses[0]);
+            const [password, setPassword] = useState('');
+
+            const onRegisterClick = () => {
+                if (studentName && studentId && studentClass && password) {
+                    handleRegistration({ studentName, studentId, studentClass, password });
+                } else {
+                    showCustomMessage('Semua kolom harus diisi.');
+                }
+            };
+            
+            return (
+                <div className="flex flex-col items-center justify-center p-4">
+                    <h1 className="text-3xl font-extrabold text-center text-gray-900 mb-2">Daftar Siswa Baru</h1>
+                    <p className="text-center text-gray-500 mb-8">Buat akun dengan ID Siswa Anda</p>
+                    <input
+                        type="text"
+                        placeholder="Nama Lengkap"
+                        className="w-full p-3 mb-4 text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-200 transition-all"
+                        value={studentName}
+                        onChange={(e) => setStudentName(e.target.value)}
+                    />
+                    <input
+                        type="text"
+                        placeholder="ID Siswa (dari kartu pelajar)"
+                        className="w-full p-3 mb-4 text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-200 transition-all"
+                        value={studentId}
+                        onChange={(e) => setStudentId(e.target.value)}
+                    />
+                    <select
+                        className="w-full p-3 mb-4 text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-200 transition-all"
+                        value={studentClass}
+                        onChange={(e) => setStudentClass(e.target.value)}
+                    >
+                        {studentClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <input
+                        type="password"
+                        placeholder="Kata Sandi (gunakan ID Siswa Anda)"
+                        className="w-full p-3 mb-4 text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-200 transition-all"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                        className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg mb-4"
+                        onClick={onRegisterClick}
+                    >
+                        Daftar
+                    </button>
+                    <button
+                        className="mt-4 text-blue-600 hover:text-blue-800 font-semibold"
+                        onClick={() => setView('login')}
+                    >
+                        Kembali ke Halaman Masuk
+                    </button>
+                </div>
+            );
+        };
+
+        const StudentDashboard = ({ loggedInUser, setLoggedInUser, setLoggedInRole, students, setStudents, products, setProducts, topUpRequests, setTopUpRequests, deliveryOrders, setDeliveryOrders }) => {
+            const [cart, setCart] = useState([]);
+            const [view, setView] = useState('dashboard'); // 'dashboard', 'topup', 'history'
+            const [isDelivery, setIsDelivery] = useState(false);
+            const [topUpMethod, setTopUpMethod] = useState(''); // New state for top-up method
+
+            const handleLogout = () => {
+                setLoggedInUser(null);
+                setLoggedInRole(null);
+            };
+
+            const addToCart = (product) => {
+                if (product.stock <= 0) {
+                    showCustomMessage('Stok produk habis!');
+                    return;
+                }
+                const existingItem = cart.find(item => item.id === product.id);
+                if (existingItem) {
+                    setCart(cart.map(item =>
+                        item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+                    ));
+                } else {
+                    setCart([...cart, { ...product, quantity: 1 }]);
+                }
+                setProducts(products.map(p => 
+                    p.id === product.id ? { ...p, stock: p.stock - 1 } : p
+                ));
+            };
+
+            const removeFromCart = (product) => {
+                const existingItem = cart.find(item => item.id === product.id);
+                if (!existingItem) return;
+
+                setProducts(products.map(p => 
+                    p.id === product.id ? { ...p, stock: p.stock + 1 } : p
+                ));
+                if (existingItem.quantity > 1) {
+                    setCart(cart.map(item =>
+                        item.id === product.id ? { ...item, quantity: item.quantity - 1 } : item
+                    ));
+                } else {
+                    setCart(cart.filter(item => item.id !== product.id));
+                }
+            };
+            
+            const handleCheckout = () => {
+                const studentClass = isDelivery ? document.getElementById('studentClassSelect').value : null;
+                
+                const subtotalCost = cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+                const totalCost = subtotalCost + (isDelivery ? DELIVERY_FEE : 0);
+
+                if (loggedInUser.balance >= totalCost) {
+                    const newTransactionId = Date.now();
+                    // Update student's balance and transactions
+                    const newStudents = students.map(s => {
+                        if (s.id === loggedInUser.id) {
+                            const newTransaction = {
+                                id: newTransactionId,
+                                type: 'Pembelian',
+                                amount: totalCost,
+                                timestamp: new Date().toLocaleString(),
+                                items: cart.map(item => ({ name: item.name, quantity: item.quantity })),
+                                deliveryOption: isDelivery ? 'Diantar' : 'Ambil Sendiri',
+                            };
+                            return {
+                                ...s,
+                                balance: s.balance - totalCost,
+                                transactions: [...s.transactions, newTransaction]
+                            };
+                        }
+                        return s;
+                    });
+
+                    // Add delivery order if needed
+                    if (isDelivery) {
+                        const newOrder = {
+                            id: newTransactionId,
+                            studentId: loggedInUser.id,
+                            studentName: loggedInUser.name,
+                            studentClass: studentClass,
+                            deliveryPersonId: null,
+                            status: 'Menunggu Persetujuan Admin',
+                            items: cart.map(item => ({ name: item.name, quantity: item.quantity })),
+                            timestamp: new Date().toLocaleString(),
+                        };
+                        setDeliveryOrders(prevOrders => [...prevOrders, newOrder]);
+                    }
+
+                    setStudents(newStudents);
+                    setCart([]);
+                    setLoggedInUser(newStudents.find(s => s.id === loggedInUser.id)); // Update loggedInUser state
+                    showCustomMessage(`Pembelian berhasil! Saldo Anda sekarang: Rp ${newStudents.find(s => s.id === loggedInUser.id).balance.toLocaleString('id-ID')}`);
+                } else {
+                    showCustomMessage('Saldo tidak mencukupi.');
+                }
+            };
+            
+            // Modified handleTopUpRequest to accept method
+            const handleTopUpRequest = (amount, method) => {
+                if (amount > 0) {
+                    const newRequest = { id: Date.now(), userId: loggedInUser.id, amount, status: 'Pending', method };
+                    setTopUpRequests(prevRequests => [...prevRequests, newRequest]);
+                    showCustomMessage(`Permintaan top-up sebesar Rp ${amount.toLocaleString('id-ID')} berhasil diajukan dengan metode ${method}.`);
+                    setView('dashboard');
+                } else {
+                    showCustomMessage('Nominal top-up harus lebih dari 0.');
+                }
+            };
+            
+            // New function for student to mark order as received
+            const markOrderAsReceived = (orderId) => {
+                showCustomConfirm('Apakah Anda yakin ingin menandai pesanan ini sudah diterima?', () => {
+                    const newOrders = deliveryOrders.map(order => 
+                        order.id === orderId ? { ...order, status: 'Pesanan Sudah Diterima' } : order
+                    );
+                    setDeliveryOrders(newOrders);
+                    
+                    const updatedUser = {
+                        ...loggedInUser,
+                        transactions: loggedInUser.transactions.map(t =>
+                            t.id === orderId ? { ...t, deliveryStatus: 'Pesanan Sudah Diterima' } : t
+                        )
+                    };
+                    setLoggedInUser(updatedUser);
+                    showCustomMessage('Pesanan berhasil ditandai sudah diterima.');
+                });
+            };
+            
+            // Updated to handle new statuses
+            const getDeliveryStatusText = (transaction) => {
+                if (transaction.deliveryOption === 'Ambil Sendiri') {
+                    return 'Pengambilan Mandiri';
+                }
+                const order = deliveryOrders.find(o => o.id === transaction.id);
+                if (order) {
+                    if (order.status === 'Menunggu Persetujuan Admin') return 'Menunggu persetujuan admin';
+                    if (order.status === 'Pesanan Sedang Diproses') return `Pesanan sedang diproses dan akan diantar oleh ${getDeliveryStaffName(order.deliveryPersonId)}`;
+                    if (order.status === 'Pesanan Sudah Diterima') return `Pesanan sudah diterima`;
+                }
+                return 'Status tidak diketahui';
+            };
+            
+            const getDeliveryStaffName = (staffId) => {
+                const staff = deliveryStaff.find(s => s.id === staffId);
+                return staff ? staff.name : 'Petugas';
+            };
+
+            // Main content rendering based on 'view' state
+            if (view === 'topup') {
+                return (
+                    <TopUpPage 
+                        handleTopUpRequest={handleTopUpRequest} 
+                        setView={setView} 
+                        loggedInUser={loggedInUser}
+                    />
+                );
+            }
+            
+            if (view === 'history') {
+                 return (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg shadow-md">
+                            <h2 className="text-2xl font-bold text-gray-800">Riwayat Transaksi</h2>
+                            <button onClick={() => setView('dashboard')} className="bg-gray-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">Kembali</button>
+                        </div>
+                        <div className="bg-white p-6 rounded-lg shadow-md">
+                            {loggedInUser.transactions.length === 0 ? 
+                                <p className="text-gray-500 text-center">Belum ada riwayat transaksi.</p> :
+                                <div className="space-y-4">
+                                    {loggedInUser.transactions.map(t => (
+                                        <div key={t.id} className={`p-4 rounded-lg shadow-sm ${t.type === 'Pembelian' ? 'bg-red-50' : 'bg-green-50'}`}>
+                                            <div className="flex justify-between items-center">
+                                                <span className="font-bold text-gray-800">{t.type}</span>
+                                                <span className={`font-bold ${t.type === 'Pembelian' ? 'text-red-600' : 'text-green-600'}`}>
+                                                    {t.type === 'Pembelian' ? '-' : '+'} Rp {t.amount.toLocaleString('id-ID')}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-gray-500">{t.timestamp}</p>
+                                            {t.deliveryOption === 'Diantar' && (
+                                                <>
+                                                    <p className="text-sm text-gray-500">Status: {getDeliveryStatusText(t)}</p>
+                                                    {deliveryOrders.find(o => o.id === t.id && o.status === 'Pesanan Sedang Diproses') && (
+                                                        <button 
+                                                            onClick={() => markOrderAsReceived(t.id)} 
+                                                            className="mt-2 text-white bg-green-500 font-semibold px-3 py-1 rounded-lg hover:bg-green-600 transition-colors"
+                                                        >
+                                                            Pesanan Sudah Diterima
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            }
+                        </div>
+                    </div>
+                );
+            }
+            
+            // Default view: Dashboard
+            const subtotalCost = cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+            const totalCost = subtotalCost + (isDelivery ? DELIVERY_FEE : 0);
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg shadow-md">
+                        <h2 className="text-2xl font-bold text-gray-800">Halo, {loggedInUser.name}!</h2>
+                        <button
+                            className="bg-red-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
+                            onClick={handleLogout}
+                        >
+                            Keluar
+                        </button>
+                    </div>
+                    <div className="bg-green-50 p-6 rounded-lg shadow-md">
+                        <p className="text-sm text-green-700">Saldo Anda saat ini:</p>
+                        <p className="text-4xl font-extrabold text-green-900 mt-1">Rp {loggedInUser.balance.toLocaleString('id-ID')}</p>
+                    </div>
+                    <div className="bg-gray-50 p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Produk Koperasi</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {products.map(p => (
+                                <div key={p.id} className="bg-white p-4 rounded-lg shadow-sm flex items-center justify-between">
+                                    <div>
+                                        <p className="font-semibold text-gray-800">{p.name}</p>
+                                        <p className="text-sm text-gray-500">Rp {p.price.toLocaleString('id-ID')} | Stok: {p.stock}</p>
+                                    </div>
+                                    <button 
+                                        className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-400"
+                                        onClick={() => addToCart(p)}
+                                        disabled={p.stock <= 0}
+                                    >
+                                        Tambah
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Keranjang Belanja</h3>
+                        <div id="cartItems">
+                            {cart.length === 0 ? (
+                                <p className="text-gray-500 text-center p-4">Keranjang Anda kosong.</p>
+                            ) : (
+                                <>
+                                    {cart.map(item => (
+                                        <div key={item.id} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
+                                            <span className="font-medium text-gray-800">{item.name} <span className="text-gray-500">x{item.quantity}</span></span>
+                                            <div className="flex items-center space-x-2">
+                                                <span className="font-bold text-gray-700">Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                                                <button onClick={() => removeFromCart(item)} className="text-red-500 hover:text-red-700 transition-colors">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 100 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div className="mt-4 pt-4 border-t-2 border-gray-100">
+                                        <div className="mb-4">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Opsi Pengiriman:</label>
+                                            <div className="flex items-center space-x-4">
+                                                <label className="inline-flex items-center">
+                                                    <input type="radio" name="deliveryOption" value="pickup" defaultChecked className="form-radio text-blue-600" onChange={() => setIsDelivery(false)} />
+                                                    <span className="ml-2 text-gray-700">Ambil Sendiri</span>
+                                                </label>
+                                                <label className="inline-flex items-center">
+                                                    <input type="radio" name="deliveryOption" value="delivery" className="form-radio text-blue-600" onChange={() => setIsDelivery(true)} />
+                                                    <span className="ml-2 text-gray-700">Diantar (Gratis)</span>
+                                                </label>
+                                            </div>
+                                            {isDelivery && (
+                                                <div id="deliveryOptions" className="mt-4">
+                                                    <label htmlFor="studentClassSelect" className="block text-sm font-medium text-gray-700 mb-2">Pilih Kelas:</label>
+                                                    <select id="studentClassSelect" className="block w-full p-2 border-2 border-gray-300 rounded-lg">
+                                                        {studentClasses.map(c => <option key={c} value={c}>{c}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-lg font-bold">Total: <span id="totalCost">Rp {totalCost.toLocaleString('id-ID')}</span></span>
+                                            <button 
+                                                className="bg-purple-600 text-white font-bold px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors shadow-lg"
+                                                onClick={handleCheckout}
+                                            >
+                                                Checkout
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <button onClick={() => setView('topup')} className="bg-yellow-500 text-white font-bold py-3 rounded-lg hover:bg-yellow-600 transition-colors shadow-lg">Ajukan Top-up</button>
+                        <button onClick={() => setView('history')} className="bg-gray-500 text-white font-bold py-3 rounded-lg hover:bg-gray-600 transition-colors shadow-lg">Riwayat Transaksi</button>
+                    </div>
+                </div>
+            );
+        };
+        
+        // New component for TopUp page
+        const TopUpPage = ({ handleTopUpRequest, setView, loggedInUser }) => {
+            const [topUpAmount, setTopUpAmount] = useState('');
+            const [topUpView, setTopUpView] = useState('options'); // 'options', 'qris', 'manual'
+            
+            const handleRequest = (method) => {
+                if (topUpAmount > 0) {
+                    handleTopUpRequest(parseInt(topUpAmount), method);
+                } else {
+                    showCustomMessage('Nominal top-up harus lebih dari 0.');
+                }
+            };
+            
+            if (topUpView === 'options') {
+                return (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg shadow-md">
+                            <h2 className="text-2xl font-bold text-gray-800">Pilih Metode Top-up</h2>
+                            <button onClick={() => setView('dashboard')} className="bg-gray-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">Kembali</button>
+                        </div>
+                        <div className="bg-white p-6 rounded-lg shadow-md">
+                            <p className="text-gray-600 mb-4">Saldo Anda saat ini: <span className="font-bold text-green-600">Rp {loggedInUser.balance.toLocaleString('id-ID')}</span></p>
+                            <label htmlFor="topupAmount" className="block text-sm font-medium text-gray-700 mb-2">Nominal Top-up (Rp)</label>
+                            <input 
+                                id="topupAmount" 
+                                type="number" 
+                                placeholder="Contoh: 50000" 
+                                value={topUpAmount}
+                                onChange={(e) => setTopUpAmount(e.target.value)}
+                                className="w-full p-3 mb-4 text-center border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-yellow-200 transition-all" 
+                            />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <button onClick={() => setTopUpView('qris')} className="w-full bg-indigo-500 text-white font-bold py-3 rounded-lg hover:bg-indigo-600 transition-colors shadow-lg disabled:bg-gray-400" disabled={!topUpAmount}>
+                                    Bayar dengan QRIS
+                                </button>
+                                <button onClick={() => setTopUpView('manual')} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors shadow-lg disabled:bg-gray-400" disabled={!topUpAmount}>
+                                    Bayar di Koperasi Langsung
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            } else if (topUpView === 'qris') {
+                return (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg shadow-md">
+                            <h2 className="text-2xl font-bold text-gray-800">Top-up via QRIS</h2>
+                            <button onClick={() => setTopUpView('options')} className="bg-gray-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">Kembali</button>
+                        </div>
+                        <div className="bg-white p-6 rounded-lg shadow-md text-center">
+                            <p className="text-gray-600 mb-4">Top-up sebesar <span className="font-bold">Rp {parseInt(topUpAmount).toLocaleString('id-ID')}</span></p>
+                            <p className="text-gray-500 mb-6">Silakan pindai kode QR di bawah ini untuk melakukan pembayaran.</p>
+                            <img src="https://placehold.co/250x250/2563EB/ffffff?text=QRIS+CODE" alt="QRIS Code" className="mx-auto rounded-lg shadow-lg mb-6" />
+                            <p className="text-sm text-gray-500">Setelah pembayaran berhasil, admin akan menyetujui permintaan Anda.</p>
+                            <button onClick={() => handleRequest('QRIS')} className="mt-4 w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition-colors shadow-lg">
+                                Konfirmasi Pembayaran
+                            </button>
+                        </div>
+                    </div>
+                );
+            } else if (topUpView === 'manual') {
+                return (
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg shadow-md">
+                            <h2 className="text-2xl font-bold text-gray-800">Top-up Tunai</h2>
+                            <button onClick={() => setTopUpView('options')} className="bg-gray-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">Kembali</button>
+                        </div>
+                        <div className="bg-white p-6 rounded-lg shadow-md text-center">
+                            <p className="text-gray-600 mb-4">Top-up sebesar <span className="font-bold">Rp {parseInt(topUpAmount).toLocaleString('id-ID')}</span></p>
+                            <p className="text-gray-500 mb-6">Silakan datang ke koperasi sekolah untuk melakukan pembayaran tunai. Admin akan memverifikasi dan menyetujui top-up Anda secara langsung.</p>
+                            <button onClick={() => handleRequest('Bayar Langsung di Koperasi')} className="mt-4 w-full bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 transition-colors shadow-lg">
+                                Ajukan Top-up Tunai
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+        };
+
+        const AdminDashboard = ({ setLoggedInUser, setLoggedInRole, students, setStudents, pendingRegistrations, setPendingRegistrations, products, setProducts, topUpRequests, setTopUpRequests, deliveryOrders, setDeliveryOrders, deliveryStaff }) => {
+            const [view, setView] = useState('dashboard');
+
+            const handleLogout = () => {
+                setLoggedInUser(null);
+                setLoggedInRole(null);
+            };
+
+            const approveTopUp = (requestId) => {
+                const request = topUpRequests.find(req => req.id === requestId);
+                if (request) {
+                    const newStudents = students.map(s => {
+                        if (s.id === request.userId) {
+                            return {
+                                ...s,
+                                balance: s.balance + request.amount,
+                                transactions: [...s.transactions, {
+                                    id: Date.now(),
+                                    type: 'Top-up',
+                                    amount: request.amount,
+                                    timestamp: new Date().toLocaleString()
+                                }]
+                            };
+                        }
+                        return s;
+                    });
+                    setStudents(newStudents);
+                    setTopUpRequests(prevRequests => prevRequests.filter(req => req.id !== requestId));
+                    showCustomMessage(`Top-up Rp ${request.amount.toLocaleString('id-ID')} untuk ${newStudents.find(s => s.id === request.userId).name} berhasil disetujui.`);
+                }
+            };
+            
+            const rejectTopUp = (requestId) => {
+                setTopUpRequests(prevRequests => prevRequests.filter(req => req.id !== requestId));
+                showCustomMessage('Permintaan top-up ditolak.');
+            };
+
+            const addProduct = (name, price, stock) => {
+                if (name && price > 0 && stock >= 0) {
+                    const newId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
+                    setProducts(prevProducts => [...prevProducts, { id: newId, name, price, stock }]);
+                    showCustomMessage(`Produk "${name}" berhasil ditambahkan.`);
+                } else {
+                    showCustomMessage('Silakan isi semua data produk dengan benar.');
+                }
+            };
+
+            const editProduct = (productId, newName, newPrice, newStock) => {
+                setProducts(prevProducts => prevProducts.map(p => 
+                    p.id === productId ? { ...p, name: newName, price: parseInt(newPrice), stock: parseInt(newStock) } : p
+                ));
+                showCustomMessage('Produk berhasil diubah.');
+            };
+            
+            const deleteProduct = (productId) => {
+                setProducts(prevProducts => prevProducts.filter(p => p.id !== productId));
+                showCustomMessage('Produk berhasil dihapus.');
+            };
+            
+            const getDeliveryStaffName = (staffId) => {
+                const staff = deliveryStaff.find(s => s.id === staffId);
+                return staff ? staff.name : 'Tidak Ditugaskan';
+            };
+
+            // Updated to assign staff and change status to 'Pesanan Sedang Diproses'
+            const assignDeliveryStaff = (orderId, staffId) => {
+                setDeliveryOrders(prevOrders => prevOrders.map(o => 
+                    o.id === orderId ? { ...o, status: 'Pesanan Sedang Diproses', deliveryPersonId: staffId } : o
+                ));
+                showCustomMessage(`Pesanan berhasil ditugaskan ke ${getDeliveryStaffName(staffId)}.`);
+            };
+
+            // Updated to manage new statuses
+            const updateDeliveryStatus = (orderId, newStatus) => {
+                setDeliveryOrders(prevOrders => prevOrders.map(o =>
+                    o.id === orderId ? { ...o, status: newStatus } : o
+                ));
+                showCustomMessage(`Status pesanan berhasil diubah menjadi "${newStatus}".`);
+            };
+
+            // New functions for registration approval
+            const approveRegistration = (studentId) => {
+                const studentToApprove = pendingRegistrations.find(s => s.id === studentId);
+                if (studentToApprove) {
+                    setStudents(prevStudents => [...prevStudents, studentToApprove]);
+                    setPendingRegistrations(prevPending => prevPending.filter(s => s.id !== studentId));
+                    showCustomMessage(`Pendaftaran untuk ${studentToApprove.name} berhasil disetujui.`);
+                }
+            };
+            
+            const rejectRegistration = (studentId) => {
+                setPendingRegistrations(prevPending => prevPending.filter(s => s.id !== studentId));
+                showCustomMessage('Pendaftaran ditolak.');
+            };
+
+            if (view === 'topupRequests') {
+                return (
+                    <AdminTopUpRequestsPage
+                        setView={setView}
+                        topUpRequests={topUpRequests}
+                        approveTopUp={approveTopUp}
+                        rejectTopUp={rejectTopUp}
+                        students={students}
+                    />
+                );
+            }
+            if (view === 'productManagement') {
+                 return (
+                    <AdminProductManagementPage
+                        setView={setView}
+                        products={products}
+                        addProduct={addProduct}
+                        editProduct={editProduct}
+                        deleteProduct={deleteProduct}
+                    />
+                );
+            }
+            if (view === 'deliveryManagement') {
+                 return (
+                    <AdminDeliveryPage
+                        setView={setView}
+                        deliveryOrders={deliveryOrders}
+                        deliveryStaff={deliveryStaff}
+                        assignDeliveryStaff={assignDeliveryStaff}
+                        updateDeliveryStatus={updateDeliveryStatus}
+                        getDeliveryStaffName={getDeliveryStaffName}
+                    />
+                );
+            }
+            if (view === 'registrationRequests') {
+                 return (
+                    <AdminRegistrationRequestsPage
+                        setView={setView}
+                        pendingRegistrations={pendingRegistrations}
+                        approveRegistration={approveRegistration}
+                        rejectRegistration={rejectRegistration}
+                    />
+                );
+            }
+
+            // Default view: Admin Dashboard
+            const totalStudentBalance = students.reduce((sum, s) => sum + s.balance, 0);
+            const totalTransactions = students.reduce((sum, s) => sum + s.transactions.length, 0);
+            const pendingRequests = topUpRequests.length + deliveryOrders.filter(o => o.status === 'Menunggu Persetujuan Admin').length;
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg shadow-md">
+                        <h2 className="text-2xl font-bold text-gray-800">Dashboard Admin</h2>
+                        <button
+                            className="bg-red-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
+                            onClick={handleLogout}
+                        >
+                            Keluar
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <button onClick={() => setView('topupRequests')} className="relative bg-blue-600 text-white font-bold py-4 rounded-lg hover:bg-blue-700 transition-colors shadow-lg">
+                            Kelola Top-up
+                            {topUpRequests.length > 0 && (
+                                <span className="absolute top-0 right-0 -mt-2 -mr-2 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-full">
+                                    {topUpRequests.length}
+                                </span>
+                            )}
+                        </button>
+                        <button onClick={() => setView('productManagement')} className="bg-green-600 text-white font-bold py-4 rounded-lg hover:bg-green-700 transition-colors shadow-lg">
+                            Kelola Produk
+                        </button>
+                        <button onClick={() => setView('deliveryManagement')} className="relative bg-purple-600 text-white font-bold py-4 rounded-lg hover:bg-purple-700 transition-colors shadow-lg">
+                            Kelola Pengiriman
+                            {deliveryOrders.filter(o => o.status === 'Menunggu Persetujuan Admin' || o.status === 'Pesanan Sedang Diproses').length > 0 && (
+                                <span className="absolute top-0 right-0 -mt-2 -mr-2 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-full">
+                                    {deliveryOrders.filter(o => o.status === 'Menunggu Persetujuan Admin' || o.status === 'Pesanan Sedang Diproses').length}
+                                </span>
+                            )}
+                        </button>
+                        <button onClick={() => setView('registrationRequests')} className="relative bg-yellow-600 text-white font-bold py-4 rounded-lg hover:bg-yellow-700 transition-colors shadow-lg">
+                            Persetujuan Pendaftaran
+                            {pendingRegistrations.length > 0 && (
+                                <span className="absolute top-0 right-0 -mt-2 -mr-2 px-2 py-1 bg-red-500 text-white text-xs font-bold rounded-full">
+                                    {pendingRegistrations.length}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                    
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Ringkasan Laporan</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="bg-blue-50 p-4 rounded-lg">
+                                <p className="text-blue-700">Total Saldo Siswa:</p>
+                                <p className="text-2xl font-bold text-blue-900">Rp {totalStudentBalance.toLocaleString('id-ID')}</p>
+                            </div>
+                            <div className="bg-purple-50 p-4 rounded-lg">
+                                <p className="text-purple-700">Total Transaksi:</p>
+                                <p className="text-2xl font-bold text-purple-900">{totalTransactions}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        // Updated component to display top-up requests with payment method
+        const AdminTopUpRequestsPage = ({ setView, topUpRequests, approveTopUp, rejectTopUp, students }) => {
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg shadow-md">
+                        <h2 className="text-2xl font-bold text-gray-800">Permintaan Top-up</h2>
+                        <button onClick={() => setView('dashboard')} className="bg-gray-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">Kembali</button>
+                    </div>
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Daftar Permintaan ({topUpRequests.length})</h3>
+                        <div className="space-y-4">
+                            {topUpRequests.length === 0 ? <p className="text-gray-500 text-center">Tidak ada permintaan top-up.</p> :
+                                topUpRequests.map(req => {
+                                    const student = students.find(s => s.id === req.userId);
+                                    return (
+                                        <div key={req.id} className="p-4 bg-yellow-50 rounded-lg flex justify-between items-center shadow-sm">
+                                            <div>
+                                                <p className="font-bold text-gray-800">{student.name}</p>
+                                                <p className="text-lg font-bold text-yellow-700">Rp {req.amount.toLocaleString('id-ID')}</p>
+                                                <span className="text-sm text-gray-600">Metode: {req.method}</span>
+                                            </div>
+                                            <div className="flex space-x-2">
+                                                <button onClick={() => approveTopUp(req.id)} className="bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 transition-colors">Setujui</button>
+                                                <button onClick={() => rejectTopUp(req.id)} className="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition-colors">Tolak</button>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            }
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        const AdminProductManagementPage = ({ setView, products, addProduct, editProduct, deleteProduct }) => {
+            const [productName, setProductName] = useState('');
+            const [productPrice, setProductPrice] = useState('');
+            const [productStock, setProductStock] = useState('');
+
+            const handleAdd = () => {
+                addProduct(productName, parseInt(productPrice), parseInt(productStock));
+                setProductName('');
+                setProductPrice('');
+                setProductStock('');
+            };
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg shadow-md">
+                        <h2 className="text-2xl font-bold text-gray-800">Kelola Produk</h2>
+                        <button onClick={() => setView('dashboard')} className="bg-gray-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">Kembali</button>
+                    </div>
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Tambah Produk Baru</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label htmlFor="productName" className="block text-sm font-medium text-gray-700">Nama Produk</label>
+                                <input type="text" id="productName" value={productName} onChange={e => setProductName(e.target.value)} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
+                            </div>
+                            <div>
+                                <label htmlFor="productPrice" className="block text-sm font-medium text-gray-700">Harga (Rp)</label>
+                                <input type="number" id="productPrice" value={productPrice} onChange={e => setProductPrice(e.target.value)} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
+                            </div>
+                            <div>
+                                <label htmlFor="productStock" className="block text-sm font-medium text-gray-700">Stok</label>
+                                <input type="number" id="productStock" value={productStock} onChange={e => setProductStock(e.target.value)} className="mt-1 block w-full p-2 border border-gray-300 rounded-md" />
+                            </div>
+                            <button onClick={handleAdd} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition-colors">Tambah Produk</button>
+                        </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Daftar Produk ({products.length})</h3>
+                        <div className="space-y-4">
+                            {products.map(p => (
+                                <div key={p.id} className="p-4 bg-gray-50 rounded-lg flex justify-between items-center shadow-sm">
+                                    <div>
+                                        <p className="font-bold text-gray-800">{p.name}</p>
+                                        <p className="text-sm text-gray-600">Rp {p.price.toLocaleString('id-ID')} | Stok: {p.stock}</p>
+                                    </div>
+                                    <div className="flex space-x-2">
+                                        <button 
+                                            onClick={() => showCustomPrompt('Edit Nama Produk:', p.name, (newName) => {
+                                                showCustomPrompt('Edit Harga:', p.price, (newPrice) => {
+                                                    showCustomPrompt('Edit Stok:', p.stock, (newStock) => {
+                                                        if (newName && newPrice && newStock) editProduct(p.id, newName, newPrice, newStock);
+                                                    });
+                                                });
+                                            })}
+                                            className="bg-yellow-500 text-white px-3 py-1 rounded-lg hover:bg-yellow-600 transition-colors"
+                                        >
+                                            Edit
+                                        </button>
+                                        <button onClick={() => showCustomConfirm('Apakah Anda yakin ingin menghapus produk ini?', () => deleteProduct(p.id))} className="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition-colors">Hapus</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        const AdminDeliveryPage = ({ setView, deliveryOrders, deliveryStaff, assignDeliveryStaff, updateDeliveryStatus, getDeliveryStaffName }) => {
+            const awaitingApprovalOrders = deliveryOrders.filter(o => o.status === 'Menunggu Persetujuan Admin');
+            const processingOrders = deliveryOrders.filter(o => o.status === 'Pesanan Sedang Diproses');
+            const receivedOrders = deliveryOrders.filter(o => o.status === 'Pesanan Sudah Diterima');
+            
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg shadow-md">
+                        <h2 className="text-2xl font-bold text-gray-800">Kelola Pesanan Pengiriman</h2>
+                        <button onClick={() => setView('dashboard')} className="bg-gray-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">Kembali</button>
+                    </div>
+                    
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Pesanan Menunggu Persetujuan ({awaitingApprovalOrders.length})</h3>
+                        <div className="space-y-4">
+                            {awaitingApprovalOrders.length === 0 ? <p className="text-gray-500 text-center">Tidak ada pesanan menunggu persetujuan.</p> :
+                                awaitingApprovalOrders.map(order => (
+                                    <div key={order.id} className="p-4 bg-yellow-50 rounded-lg shadow-sm">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="font-bold text-gray-800">Pesanan dari {order.studentName}</span>
+                                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-yellow-200 text-yellow-800">{order.status}</span>
+                                        </div>
+                                        <p className="text-sm text-gray-600">Kelas: {order.studentClass}</p>
+                                        <div className="mt-2 text-sm text-gray-500">
+                                            <p className="font-semibold">Isi Pesanan:</p>
+                                            <ul className="list-disc list-inside">
+                                                {order.items.map((item, index) => <li key={index}>{item.name} (x{item.quantity})</li>)}
+                                            </ul>
+                                        </div>
+                                        <div className="mt-4">
+                                            <label htmlFor={`deliveryStaffSelect-${order.id}`} className="block text-sm font-medium text-gray-700 mb-2">Tugaskan Petugas:</label>
+                                            <select id={`deliveryStaffSelect-${order.id}`} className="block w-full p-2 mb-4 border-2 border-gray-300 rounded-lg">
+                                                {deliveryStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                            </select>
+                                            <button onClick={() => assignDeliveryStaff(order.id, document.getElementById(`deliveryStaffSelect-${order.id}`).value)} className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg hover:bg-blue-700 transition-colors">Tugaskan</button>
+                                        </div>
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                    
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Pesanan Sedang Diproses ({processingOrders.length})</h3>
+                        <div className="space-y-4">
+                            {processingOrders.length === 0 ? <p className="text-gray-500 text-center">Tidak ada pesanan yang sedang diproses.</p> :
+                                processingOrders.map(order => (
+                                    <div key={order.id} className="p-4 bg-gray-50 rounded-lg shadow-sm">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="font-bold text-gray-800">Pesanan dari {order.studentName}</span>
+                                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-200 text-green-800">{order.status}</span>
+                                        </div>
+                                        <p className="text-sm text-gray-600">Petugas: {getDeliveryStaffName(order.deliveryPersonId)}</p>
+                                        <p className="text-sm text-gray-600">Kelas: {order.studentClass}</p>
+                                        <div className="mt-2 text-sm text-gray-500">
+                                            <p className="font-semibold">Isi Pesanan:</p>
+                                            <ul className="list-disc list-inside">
+                                                {order.items.map((item, index) => <li key={index}>{item.name} (x{item.quantity})</li>)}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                    
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Pesanan Sudah Diterima ({receivedOrders.length})</h3>
+                        <div className="space-y-4">
+                            {receivedOrders.length === 0 ? <p className="text-gray-500 text-center">Belum ada pesanan yang sudah diterima.</p> :
+                                receivedOrders.map(order => (
+                                    <div key={order.id} className="p-4 bg-green-50 rounded-lg shadow-sm">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="font-bold text-gray-800">Pesanan dari {order.studentName}</span>
+                                            <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-500 text-white">{order.status}</span>
+                                        </div>
+                                        <p className="text-sm text-gray-600">Petugas: {getDeliveryStaffName(order.deliveryPersonId)}</p>
+                                        <p className="text-sm text-gray-600">Kelas: {order.studentClass}</p>
+                                        <div className="mt-2 text-sm text-gray-500">
+                                            <p className="font-semibold">Isi Pesanan:</p>
+                                            <ul className="list-disc list-inside">
+                                                {order.items.map((item, index) => <li key={index}>{item.name} (x{item.quantity})</li>)}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        const AdminRegistrationRequestsPage = ({ setView, pendingRegistrations, approveRegistration, rejectRegistration }) => {
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center bg-gray-50 p-4 rounded-lg shadow-md">
+                        <h2 className="text-2xl font-bold text-gray-800">Persetujuan Pendaftaran</h2>
+                        <button onClick={() => setView('dashboard')} className="bg-gray-500 text-white font-semibold px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">Kembali</button>
+                    </div>
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4">Permintaan Pendaftaran ({pendingRegistrations.length})</h3>
+                        <div className="space-y-4">
+                            {pendingRegistrations.length === 0 ? <p className="text-gray-500 text-center">Tidak ada permintaan pendaftaran baru.</p> :
+                                pendingRegistrations.map(req => (
+                                    <div key={req.id} className="p-4 bg-yellow-50 rounded-lg flex justify-between items-center shadow-sm">
+                                        <div>
+                                            <p className="font-bold text-gray-800">{req.name} ({req.id})</p>
+                                            <p className="text-sm text-gray-600">Kelas: {req.class}</p>
+                                            <p className="text-sm text-gray-600">Tanggal Daftar: {new Date(req.registrationDate).toLocaleDateString()}</p>
+                                        </div>
+                                        <div className="flex space-x-2">
+                                            <button onClick={() => approveRegistration(req.id)} className="bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600 transition-colors">Setujui</button>
+                                            <button onClick={() => rejectRegistration(req.id)} className="bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition-colors">Tolak</button>
+                                        </div>
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        
+        // This is the correct way to render a React application with React 18
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+
+    </script>
+</body>
+</html>
